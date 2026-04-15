@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("Hello World");
+  res.send("CheckShelf server is running");
 });
 
 const { MongoClient, ServerApiVersion } = require("mongodb");
@@ -25,6 +25,14 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    const booksCollection = client.db("checkShelfDB").collection("books");
+
+    // get all the books
+    app.get("/books", async (req, res) => {
+      const result = await booksCollection.find().toArray();
+      res.send(result);
+    });
+
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
     // Send a ping to confirm a successful connection
