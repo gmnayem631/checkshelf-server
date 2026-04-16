@@ -26,10 +26,21 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const booksCollection = client.db("checkShelfDB").collection("books");
+    const coursesCollection = client.db("checkShelfDB").collection("courses");
+
+    // Books API
 
     // get all the books
     app.get("/books", async (req, res) => {
       const result = await booksCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Courses API
+
+    // get all the courses
+    app.get("/courses", async (req, res) => {
+      const result = await coursesCollection.find().toArray();
       res.send(result);
     });
 
