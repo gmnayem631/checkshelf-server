@@ -27,6 +27,9 @@ async function run() {
   try {
     const booksCollection = client.db("checkShelfDB").collection("books");
     const coursesCollection = client.db("checkShelfDB").collection("courses");
+    const instructorsCollection = client
+      .db("checkShelfDB")
+      .collection("instructors");
 
     // Books API
 
@@ -41,6 +44,14 @@ async function run() {
     // get all the courses
     app.get("/courses", async (req, res) => {
       const result = await coursesCollection.find().toArray();
+      res.send(result);
+    });
+
+    // instructors API
+
+    // get all the instructors
+    app.get("/instructors", async (req, res) => {
+      const result = await instructorsCollection.find().toArray();
       res.send(result);
     });
 
