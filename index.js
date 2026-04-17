@@ -11,7 +11,7 @@ app.get("/", (req, res) => {
   res.send("CheckShelf server is running");
 });
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.au1728f.mongodb.net/?appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -25,6 +25,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    // collections of books, courses, instructors
     const booksCollection = client.db("checkShelfDB").collection("books");
     const coursesCollection = client.db("checkShelfDB").collection("courses");
     const instructorsCollection = client
@@ -39,6 +40,15 @@ async function run() {
       res.send(result);
     });
 
+    // single book using dynamic route
+    app.get("/books/:id", async (req, res) => {
+      const { id } = req.params;
+      // console.log(id);
+      const query = { _id: new ObjectId(id) };
+      const result = await booksCollection.findOne(query);
+      res.send(result);
+    });
+
     // Courses API
 
     // get all the courses
@@ -47,11 +57,27 @@ async function run() {
       res.send(result);
     });
 
+    // single course using dynamic route
+    app.get("/courses/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await coursesCollection.findOne(query);
+      res.send(result);
+    });
+
     // instructors API
 
     // get all the instructors
     app.get("/instructors", async (req, res) => {
       const result = await instructorsCollection.find().toArray();
+      res.send(result);
+    });
+
+    // single instructor using dynamic route
+    app.get("/instructors/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await instructorsCollection.findOne(query);
       res.send(result);
     });
 
