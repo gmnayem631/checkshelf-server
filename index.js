@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(cors());
 app.use(express.json());
@@ -11,8 +12,12 @@ app.get("/", (req, res) => {
   res.send("CheckShelf server is running");
 });
 
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.au1728f.mongodb.net/?appName=Cluster0`;
+// Replace the old SRV URI with this expanded version
+// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.au1728f.mongodb.net/?appName=Cluster0`;
+
+// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.au1728f.mongodb.net/?appName=Cluster0`;
+
+const uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@ac-3bemznd-shard-00-00.au1728f.mongodb.net:27017,ac-3bemznd-shard-00-01.au1728f.mongodb.net:27017,ac-3bemznd-shard-00-02.au1728f.mongodb.net:27017/?ssl=true&replicaSet=atlas-fg9v2y-shard-0&authSource=admin&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -76,7 +81,9 @@ async function run() {
     // single instructor using dynamic route
     app.get("/instructors/:id", async (req, res) => {
       const { id } = req.params;
-      const query = { _id: new ObjectId(id) };
+      const query = {
+        insID: id,
+      };
       const result = await instructorsCollection.findOne(query);
       res.send(result);
     });
