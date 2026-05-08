@@ -54,6 +54,12 @@ async function run() {
       res.send(result);
     });
 
+    app.post("/books", async (req, res) => {
+      const bookData = req.body;
+      const result = await booksCollection.insertOne(bookData);
+      res.send(result);
+    });
+
     // Courses API
 
     // get all the courses
