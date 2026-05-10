@@ -4,10 +4,10 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const { createClient } = require("@google/genai");
+const { GoogleGenAI } = require("@google/genai");
 
 // 1. Initialize the client
-const client = createClient({ apiKey: process.env.GEMINI_API_KEY });
+const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 app.use(cors());
 app.use(express.json());
@@ -24,7 +24,7 @@ app.get("/", (req, res) => {
 const uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@ac-3bemznd-shard-00-00.au1728f.mongodb.net:27017,ac-3bemznd-shard-00-01.au1728f.mongodb.net:27017,ac-3bemznd-shard-00-02.au1728f.mongodb.net:27017/?ssl=true&replicaSet=atlas-fg9v2y-shard-0&authSource=admin&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
+const mongoClient = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
@@ -35,9 +35,11 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // collections of books, courses, instructors
-    const booksCollection = client.db("checkShelfDB").collection("books");
-    const coursesCollection = client.db("checkShelfDB").collection("courses");
-    const instructorsCollection = client
+    const booksCollection = mongoClient.db("checkShelfDB").collection("books");
+    const coursesCollection = mongoClient
+      .db("checkShelfDB")
+      .collection("courses");
+    const instructorsCollection = mongoClient
       .db("checkShelfDB")
       .collection("instructors");
 
@@ -77,7 +79,7 @@ async function run() {
         tags: b.tags,
       }));
 
-      const response = await client.models.generateContent({
+      const response = await aiClient.models.generateContent({
         model: "gemini-2.0-flash",
         contents: [
           {
@@ -148,15 +150,15 @@ async function run() {
     });
 
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    await mongoClient.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    await mongoClient.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    // Ensures that the mongoClient will close when you finish/error
+    // await mongoClient.close();
   }
 }
 run().catch(console.dir);
