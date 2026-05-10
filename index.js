@@ -6,7 +6,6 @@ const port = process.env.PORT || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { GoogleGenAI } = require("@google/genai");
 
-// 1. Initialize the client
 const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 app.use(cors());
@@ -66,53 +65,126 @@ async function run() {
       res.send(result);
     });
 
-    // book recommendation through Google Gemini AI
+    // book recommendation by AI
     app.post("/aiRecommendation", async (req, res) => {
-      const { topic, level, rating } = req.body;
-      const allBooks = await booksCollection.find().toArray();
+      try {
+        const { topic, level, rating } = req.body;
 
-      // providing the IDs and Titles of books to AI
-      const inventory = allBooks.map((b) => ({
-        id: b._id.toString(), // Convert ObjectId to string
-        title: b.title,
-        level: b.level,
-        tags: b.tags,
-      }));
+        // 1. Validate inputs
+        if (!topic || !level || !rating) {
+          return res
+            .status(400)
+            .json({ error: "topic, level, and rating are required." });
+        }
 
-      const response = await aiClient.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `You are a Chess Master recommendation engine. 
-                    User Profile: Rating ${rating}, Topic: ${topic}, Experience: ${level}.
-                    
-                    Inventory: ${JSON.stringify(inventory)}
-                    
-                    TASK: Select the 2 best books from the inventory.
-                    OUTPUT: Return ONLY a JSON array of the book IDs.
-                    FORMAT: ["id1", "id2"]`,
-              },
-            ],
-          },
-        ],
-      });
+        // 2. Fetch only relevant books from MongoDB (lean payload)
+        const filteredBooks = await booksCollection
+          .find(
+            { level: level, tags: { $in: [topic] } },
+            { projection: { _id: 1, title: 1, level: 1, tags: 1 } },
+          )
+          .toArray();
 
-      // Parse the AI response (cleaning off any markdown triple backticks)
-      const aiResponseText = response.candidates[0].content.parts[0].text;
-      const cleanJson = aiResponseText.replace(/```json|```/g, "").trim();
-      const recommendedIds = JSON.parse(cleanJson);
+        if (filteredBooks.length === 0) {
+          return res
+            .status(404)
+            .json({ error: "No books found matching your criteria." });
+        }
 
-      // Fetch the FULL book objects from the DB using those IDs
-      const recommendedBooks = await booksCollection
-        .find({
-          _id: { $in: recommendedIds.map((id) => new ObjectId(id)) },
-        })
-        .toArray();
+        // 3. Build lean inventory for Gemini
+        const inventory = filteredBooks.map((b) => ({
+          id: b._id.toString(),
+          title: b.title,
+          level: b.level,
+          tags: b.tags,
+        }));
 
-      res.send(recommendedBooks);
+        // 4. Build prompt
+        const prompt = `
+You are a chess book recommendation engine.
+A user wants book recommendations based on their profile.
+
+User Profile:
+- Chess.com Rapid Rating: ${rating}
+- Topic of Interest: ${topic}
+- Skill Level: ${level}
+
+Available Books (already filtered for relevance):
+${JSON.stringify(inventory)}
+
+TASK: Select the 2 most suitable books for this user.
+RULES:
+- Return ONLY a raw JSON array of exactly 2 book ID strings.
+- No explanation, no markdown, no code fences, no extra text.
+- Example of valid response: ["683a1f77bcf86cd799439011", "683a1f77bcf86cd799439012"]
+    `.trim();
+
+        // 5. Call Gemini
+        const result = await aiClient.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+        });
+
+        const aiResponseText = result.text;
+
+        // 6. Parse safely
+        let recommendedIds;
+        try {
+          // Strip markdown fences if Gemini wraps in ```json ... ```
+          let cleaned = aiResponseText
+            .replace(/^```(?:json)?\s*/i, "")
+            .replace(/\s*```$/i, "")
+            .trim();
+
+          // Fallback: extract first [...] array if extra text sneaks in
+          if (!cleaned.startsWith("[")) {
+            const match = cleaned.match(/\[[\s\S]*\]/);
+            if (!match) throw new Error("No JSON array found in AI response.");
+            cleaned = match[0];
+          }
+
+          recommendedIds = JSON.parse(cleaned);
+
+          if (!Array.isArray(recommendedIds) || recommendedIds.length === 0) {
+            throw new Error("AI returned invalid or empty array.");
+          }
+        } catch (parseError) {
+          console.error("AI response parse failed:", parseError.message);
+          console.error("Raw AI response was:", aiResponseText);
+          return res
+            .status(500)
+            .json({ error: "AI returned an unexpected response format." });
+        }
+
+        // 7. Safe ObjectId mapping — skip invalid IDs instead of crashing
+        const validObjectIds = recommendedIds
+          .filter((id) => typeof id === "string" && ObjectId.isValid(id))
+          .map((id) => new ObjectId(id));
+
+        if (validObjectIds.length === 0) {
+          return res
+            .status(500)
+            .json({ error: "AI returned no valid book IDs." });
+        }
+
+        // 8. Fetch full book objects from MongoDB
+        const recommendedBooks = await booksCollection
+          .find({ _id: { $in: validObjectIds } })
+          .toArray();
+
+        res.json(recommendedBooks);
+      } catch (error) {
+        console.error("AI Recommendation Error:", error);
+
+        if (error?.status === 429) {
+          return res.status(429).json({
+            error: "quota_exceeded",
+            message: "AI is temporarily busy. Please try again shortly.",
+          });
+        }
+
+        res.status(500).json({ error: "AI failed to process the request." });
+      }
     });
 
     // Courses API
